@@ -10,5 +10,5 @@ RUN adduser -D -H appuser
 WORKDIR /app
 COPY --from=build /out/webservice /app/webservice
 USER appuser
-EXPOSE 8080
+EXPOSE 9000
 ENTRYPOINT ["/app/webservice"]

@@ -22,7 +22,7 @@ $sha = [Security.Cryptography.SHA256]::Create()
 
 ## 2. Build และรันบน Windows
 
-ติดตั้ง Go 1.24 ขึ้นไป แล้วเปิด CMD ในโฟลเดอร์โปรเจกต์ จากนั้น build และเริ่มเว็บ:
+ติดตั้ง Go 1.24 ขึ้นไป แล้วเปิด CMD ในโฟลเดอร์โปรเจกต์ จากนั้น build และเริ่มเว็บ โดยค่าเริ่มต้น bind ทุก IP บนพอร์ต 9000:
 
 ```cmd
 go build -o gpn-webservice.exe .
@@ -37,10 +37,12 @@ Docker ใช้เฉพาะรันเว็บเซอร์วิส โ
 
 ```sh
 docker build -t bmsp-group-policyname .
-docker run --rm -p 9000:8080 --env-file .env bmsp-group-policyname
+docker run -p 9000:9000 --env-file .env bmsp-group-policyname
 ```
 
 ถ้าฐานข้อมูลอยู่บน Windows host ให้ใช้ `host.docker.internal` แทน `localhost` ใน `DATABASE_URL` จากนั้นเปิด http://localhost:9000
+
+Docker map พอร์ต 9000 ทั้งฝั่งเครื่องและ container ส่วน `ADDR=:9000` ทำให้เว็บรับการเชื่อมต่อจากทุก interface หากต้องการเปลี่ยนค่า ให้แก้ `ADDR` ใน `.env`
 
 ## ตรวจสถานะ
 

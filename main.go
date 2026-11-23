@@ -89,7 +89,7 @@ func main() {
 	mux.HandleFunc("POST /api/policies/bulk-delete", s.bulkDeletePolicies)
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /readyz", s.ready)
-	addr := env("ADDR", ":8080")
+	addr := env("ADDR", ":9000")
 	httpServer := &http.Server{Addr: addr, Handler: s.authMiddleware(mux), ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		log.Printf("web service listening on http://localhost%s", addr)
