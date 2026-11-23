@@ -1,0 +1,5 @@
+.env
+gpn-webservice.exe
+dist/
+.cache/
+tmp/
