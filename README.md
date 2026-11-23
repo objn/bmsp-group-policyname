@@ -1,26 +1,29 @@
 # Go Web Service + PostgreSQL
 
-เว็บเซอร์วิสตัวอย่างด้วย Go เสิร์ฟหน้าเว็บและเชื่อม PostgreSQL โดยสร้างตารางอัตโนมัติเมื่อเริ่มทำงาน
+เว็บเซอร์วิสด้วย Go สำหรับจัดการ Policy เชื่อมต่อกับ PostgreSQL ที่มีอยู่แล้ว แอปจะไม่เปิด PostgreSQL และไม่สร้างหรือแก้ schema อัตโนมัติ
 
-## เริ่มใช้งานด้วย Docker Compose
+## รันด้วย Docker
 
-ต้องติดตั้ง Docker Desktop แล้วรัน:
+สร้าง image และเปิดเฉพาะเว็บเซอร์วิส:
 
 ```sh
-docker compose up --build
+docker build -t policy-center .
+docker run --rm -p 8080:8080 --env-file .env policy-center
 ```
 
-เปิดเว็บที่ http://localhost:8080
+ตั้ง `DATABASE_URL` ใน `.env` ให้ชี้ไปยัง PostgreSQL ที่รันอยู่และเข้าถึงได้จาก container ถ้าฐานข้อมูลอยู่บน Windows host ให้ใช้ `host.docker.internal` แทน `localhost` ใน URL จาก container แล้วเปิดเว็บที่ http://localhost:8080
 
 - `GET /healthz` สถานะเว็บ
 - `GET /readyz` สถานะการเชื่อมต่อ PostgreSQL
 
 ## รัน Go บนเครื่อง
 
-1. เริ่ม PostgreSQL และสร้างฐานข้อมูล (ค่าเริ่มต้น `gpn`/`gpn`/`gpn`)
-2. ตั้งค่า `DATABASE_URL` หรือ `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_SSLMODE`
-3. ติดตั้ง Air สำหรับ hot reload: `go install github.com/air-verse/air@latest`
-4. รัน `air`; เมื่อแก้ไฟล์ Go, HTML, CSS หรือ JS server จะ build และ restart ให้อัตโนมัติ
+ตั้งค่า `.env` ให้ชี้ไปยัง PostgreSQL ที่มีอยู่แล้ว จากนั้นรัน `go run .` หรือใช้ Air สำหรับ hot reload:
+
+```sh
+go install github.com/air-verse/air@latest
+air
+```
 
 หากไม่ต้องการ hot reload ใช้ `go run .` กำหนดพอร์ตเว็บด้วย `ADDR` (ค่าเริ่มต้น `:8080`)
 
@@ -30,14 +33,9 @@ docker compose up --build
 
 ไฟล์ `.env` มีข้อมูลการเชื่อมต่อฐานข้อมูลและค่า login จึงไม่ควรส่งผ่านช่องทางสาธารณะหรือ commit เข้า Git
 
-## Database init
+## Database schema
 
-ฟังก์ชัน `initializeDatabase` ใน `main.go` ใช้ `CREATE TABLE IF NOT EXISTS` ทุกครั้งเมื่อเริ่ม service จึงสร้าง `app_settings`, `visits` และ index ที่ขาด โดยไม่ลบข้อมูลเดิม หากเพิ่มตารางที่ต้องใช้ ให้เพิ่มคำสั่ง SQL ในฟังก์ชันนี้
-
-## ปรับค่ารหัสผ่าน
-
-ค่าใน compose เป็นค่าตัวอย่างสำหรับการพัฒนา ควรเปลี่ยนก่อนใช้งานจริง
-
+แอปเชื่อมต่อและตรวจสถานะ PostgreSQL เท่านั้น ไม่มีการสร้าง แก้ไข หรือลบตารางเมื่อเริ่มทำงาน หากต้องสร้างตาราง `policy_list_filtered` ให้ตรวจสอบและรัน `init.sql` ด้วยตนเองก่อน โดยผู้ดูแลฐานข้อมูลสามารถตรวจ schema และข้อมูลก่อนรันได้
 
 ## XLSX Import
 

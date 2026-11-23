@@ -137,23 +137,7 @@ func connectDatabase(ctx context.Context) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := initializeDatabase(ctx, pool); err != nil {
-		pool.Close()
-		return nil, err
-	}
 	return pool, nil
-}
-
-func initializeDatabase(ctx context.Context, db *pgxpool.Pool) error {
-	const schema = `CREATE TABLE IF NOT EXISTS policy_list_filtered (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, policy_name text, criticality text, category text, active text, "Tenant" text, "Device_Category" text);
-CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS visits (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,path TEXT NOT NULL,visited_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE INDEX IF NOT EXISTS visits_visited_at_idx ON visits (visited_at DESC);`
-	if _, err := db.Exec(ctx, schema); err != nil {
-		return err
-	}
-	log.Print("database schema initialized")
-	return nil
 }
 
 func (s *server) exportPoliciesXLSX(w http.ResponseWriter, r *http.Request) {
