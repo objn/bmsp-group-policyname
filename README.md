@@ -36,11 +36,11 @@ gpn-webservice.exe
 Docker ใช้เฉพาะรันเว็บเซอร์วิส โดยต้องตั้ง `DATABASE_URL` ให้เข้าถึง PostgreSQL จาก container ได้:
 
 ```sh
-docker build -t policy-center .
-docker run --rm -p 8080:8080 --env-file .env policy-center
+docker build -t bmsp-group-policyname .
+docker run --rm -p 9000:8080 --env-file .env bmsp-group-policyname
 ```
 
-ถ้าฐานข้อมูลอยู่บน Windows host ให้ใช้ `host.docker.internal` แทน `localhost` ใน `DATABASE_URL` จากนั้นเปิด http://localhost:8080
+ถ้าฐานข้อมูลอยู่บน Windows host ให้ใช้ `host.docker.internal` แทน `localhost` ใน `DATABASE_URL` จากนั้นเปิด http://localhost:9000
 
 ## ตรวจสถานะ
 
