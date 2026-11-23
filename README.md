@@ -1,35 +1,51 @@
 # Go Web Service + PostgreSQL
 
-เว็บเซอร์วิสด้วย Go สำหรับจัดการ Policy เชื่อมต่อกับ PostgreSQL ที่มีอยู่แล้ว แอปจะไม่เปิด PostgreSQL และไม่สร้างหรือแก้ schema อัตโนมัติ
+เว็บแอปจัดการ Policy ด้วย Go และ PostgreSQL แอปเชื่อมต่อกับ PostgreSQL ที่มีอยู่แล้วเท่านั้น ไม่ได้ติดตั้งหรือเปิด PostgreSQL และไม่สร้างหรือแก้ schema อัตโนมัติ
 
-## รันด้วย Docker
+## 1. ตั้งค่า `.env`
 
-สร้าง image และเปิดเฉพาะเว็บเซอร์วิส:
+คัดลอกไฟล์ตัวอย่างแล้วแก้ค่าการเชื่อมต่อฐานข้อมูล:
+
+```cmd
+copy .env.example .env
+notepad .env
+```
+
+ตั้ง `DATABASE_URL` ให้ชี้ไปยัง PostgreSQL ที่มีอยู่แล้ว และตั้ง `ADMIN_USER` กับ `ADMIN_PASSWORD_SHA256` สำหรับ login โดยค่า password ต้องเป็น SHA-256 ของรหัสผ่านแบบ UTF-8 แล้วเขียนเป็น hex 64 ตัว
+
+สร้าง hash บน Windows PowerShell ด้วยคำสั่งนี้ แล้วนำค่าที่ได้ไปใส่ใน `.env`:
+
+```powershell
+$sha = [Security.Cryptography.SHA256]::Create()
+[BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes('your-password'))).Replace('-', '').ToLowerInvariant()
+```
+
+## 2. Build และรันบน Windows
+
+ติดตั้ง Go 1.24 ขึ้นไป แล้วเปิด CMD ในโฟลเดอร์โปรเจกต์ จากนั้น build และเริ่มเว็บ:
+
+```cmd
+go build -o gpn-webservice.exe .
+gpn-webservice.exe
+```
+
+หรือรัน `build.cmd` เพื่อสร้างแพ็กเกจ `dist` ที่มี `gpn-webservice.exe` และ `.env` อยู่ด้วยกัน คัดลอกทั้งโฟลเดอร์ไปเครื่องปลายทาง แล้วรัน `gpn-webservice.exe` จากในโฟลเดอร์นั้น
+
+## Build และรันด้วย Docker
+
+Docker ใช้เฉพาะรันเว็บเซอร์วิส โดยต้องตั้ง `DATABASE_URL` ให้เข้าถึง PostgreSQL จาก container ได้:
 
 ```sh
 docker build -t policy-center .
 docker run --rm -p 8080:8080 --env-file .env policy-center
 ```
 
-ตั้ง `DATABASE_URL` ใน `.env` ให้ชี้ไปยัง PostgreSQL ที่รันอยู่และเข้าถึงได้จาก container ถ้าฐานข้อมูลอยู่บน Windows host ให้ใช้ `host.docker.internal` แทน `localhost` ใน URL จาก container แล้วเปิดเว็บที่ http://localhost:8080
+ถ้าฐานข้อมูลอยู่บน Windows host ให้ใช้ `host.docker.internal` แทน `localhost` ใน `DATABASE_URL` จากนั้นเปิด http://localhost:8080
 
-- `GET /healthz` สถานะเว็บ
-- `GET /readyz` สถานะการเชื่อมต่อ PostgreSQL
+## ตรวจสถานะ
 
-## รัน Go บนเครื่อง
-
-ตั้งค่า `.env` ให้ชี้ไปยัง PostgreSQL ที่มีอยู่แล้ว จากนั้นรัน `go run .` หรือใช้ Air สำหรับ hot reload:
-
-```sh
-go install github.com/air-verse/air@latest
-air
-```
-
-หากไม่ต้องการ hot reload ใช้ `go run .` กำหนดพอร์ตเว็บด้วย `ADDR` (ค่าเริ่มต้น `:8080`)
-
-## Build สำหรับย้ายไปรันบน Windows
-
-รัน `build.cmd` จาก CMD หรือดับเบิลคลิก จะ build `gpn-webservice.exe` ในโฟลเดอร์โปรเจกต์และสร้างโฟลเดอร์ `dist` ที่มี `gpn-webservice.exe` และ `.env` อยู่คู่กัน ให้คัดลอกทั้งโฟลเดอร์ `dist` ไปยังเครื่องปลายทาง แล้วเปิด CMD ในโฟลเดอร์นั้นและรัน `gpn-webservice.exe` เครื่องปลายทางต้องติดตั้งและเปิด PostgreSQL ตามค่าใน `.env` ก่อน
+- `GET /healthz` ตรวจว่าเว็บเซอร์วิสทำงาน
+- `GET /readyz` ตรวจการเชื่อมต่อ PostgreSQL
 
 ไฟล์ `.env` มีข้อมูลการเชื่อมต่อฐานข้อมูลและค่า login จึงไม่ควรส่งผ่านช่องทางสาธารณะหรือ commit เข้า Git
 
