@@ -36,9 +36,11 @@ var webFiles embed.FS
 type loginPageData struct{}
 
 type server struct {
-	db        *pgxpool.Pool
-	sessionMu sync.Mutex
-	sessions  map[string]time.Time
+	db            *pgxpool.Pool
+	sessionMu     sync.Mutex
+	sessions      map[string]time.Time
+	importSheetMu sync.RWMutex
+	importSheet   string
 }
 
 type policy struct {
@@ -153,7 +155,12 @@ func (s *server) exportPoliciesXLSX(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	f := excelize.NewFile()
 	defer f.Close()
-	sheet := f.GetSheetName(0)
+	sheet := s.lastImportSheet()
+	defaultSheet := f.GetSheetName(0)
+	if err := f.SetSheetName(defaultSheet, sheet); err != nil {
+		apiError(w, 500, err)
+		return
+	}
 	headers := []any{"No.", "Policy Name", "Criticality", "Category", "Enabled", "Tenant", "Device Category", "Playbook Usage"}
 	for col, v := range headers {
 		cell, _ := excelize.CoordinatesToCellName(col+1, 1)
@@ -390,11 +397,12 @@ func (s *server) importPolicies(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, fmt.Errorf("only .xlsx files are supported"))
 		return
 	}
-	input, err := readPolicyXLSX(file)
+	input, sheet, err := readPolicyXLSX(file)
 	if err != nil {
 		apiError(w, 400, err)
 		return
 	}
+	s.setLastImportSheet(sheet)
 	tx, err := s.db.Begin(r.Context())
 	if err != nil {
 		apiError(w, 500, err)
@@ -569,10 +577,10 @@ func policyCoreDifferences(a, b policy) []string {
 	}
 	return d
 }
-func readPolicyXLSX(src multipart.File) ([]policy, error) {
+func readPolicyXLSX(src multipart.File) ([]policy, string, error) {
 	f, err := excelize.OpenReader(src)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read XLSX: %w", err)
+		return nil, "", fmt.Errorf("cannot read XLSX: %w", err)
 	}
 	defer f.Close()
 	sheet := ""
@@ -583,14 +591,14 @@ func readPolicyXLSX(src multipart.File) ([]policy, error) {
 		}
 	}
 	if sheet == "" {
-		return nil, fmt.Errorf("worksheet 'In Scope' was not found")
+		return nil, "", fmt.Errorf("worksheet 'In Scope' was not found")
 	}
 	data, err := f.GetRows(sheet)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if len(data) < 2 {
-		return nil, fmt.Errorf("worksheet has no policy rows")
+		return nil, "", fmt.Errorf("worksheet has no policy rows")
 	}
 	indexes := map[string]int{}
 	for i, h := range data[0] {
@@ -599,7 +607,7 @@ func readPolicyXLSX(src multipart.File) ([]policy, error) {
 	required := []string{"no.", "policy name", "criticality", "category", "enabled", "tenant", "device category", "playbook usage"}
 	for _, name := range required {
 		if _, ok := indexes[name]; !ok {
-			return nil, fmt.Errorf("required column '%s' was not found", name)
+			return nil, "", fmt.Errorf("required column '%s' was not found", name)
 		}
 	}
 	cell := func(row []string, key string) string {
@@ -618,10 +626,10 @@ func readPolicyXLSX(src multipart.File) ([]policy, error) {
 		}
 		no, parseErr := strconv.ParseInt(cell(row, "no."), 10, 64)
 		if parseErr != nil || no < 1 {
-			return nil, fmt.Errorf("row %d: invalid No. %q", line+2, cell(row, "no."))
+			return nil, "", fmt.Errorf("row %d: invalid No. %q", line+2, cell(row, "no."))
 		}
 		if seenNo[no] {
-			return nil, fmt.Errorf("row %d: duplicate No. %d", line+2, no)
+			return nil, "", fmt.Errorf("row %d: duplicate No. %d", line+2, no)
 		}
 		seenNo[no] = true
 		enabled := strings.ToLower(cell(row, "enabled"))
@@ -632,18 +640,33 @@ func readPolicyXLSX(src multipart.File) ([]policy, error) {
 		case "disabled", "inactive", "in-active", "false", "no", "0":
 			active = "in-active"
 		default:
-			return nil, fmt.Errorf("row %d: unsupported Enabled value %q", line+2, cell(row, "enabled"))
+			return nil, "", fmt.Errorf("row %d: unsupported Enabled value %q", line+2, cell(row, "enabled"))
 		}
 		tenant := normalizeTenant(cell(row, "tenant"))
 		if tenant == "" {
-			return nil, fmt.Errorf("row %d: Tenant is empty", line+2)
+			return nil, "", fmt.Errorf("row %d: Tenant is empty", line+2)
 		}
-		result = append(result, policy{ID: no, PolicyName: name, Criticality: cell(row, "criticality"), Category: cell(row, "category"), Active: active, Tenant: tenant, DeviceCategory: cell(row, "device category"), PlaybookUsage: cell(row, "playbook usage")})
+		result = append(result, policy{ID: no, PolicyName: name, Criticality: strings.ToUpper(cell(row, "criticality")), Category: cell(row, "category"), Active: active, Tenant: tenant, DeviceCategory: cell(row, "device category"), PlaybookUsage: cell(row, "playbook usage")})
 	}
 	if len(result) == 0 {
-		return nil, fmt.Errorf("no valid policy records found")
+		return nil, "", fmt.Errorf("no valid policy records found")
 	}
-	return result, nil
+	return result, sheet, nil
+}
+
+func (s *server) lastImportSheet() string {
+	s.importSheetMu.RLock()
+	defer s.importSheetMu.RUnlock()
+	if s.importSheet == "" {
+		return "In Scope"
+	}
+	return s.importSheet
+}
+
+func (s *server) setLastImportSheet(sheet string) {
+	s.importSheetMu.Lock()
+	s.importSheet = sheet
+	s.importSheetMu.Unlock()
 }
 func normalizeHeader(s string) string {
 	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(s)), " "))
