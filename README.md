@@ -57,7 +57,7 @@ Docker map พอร์ต 9000 ทั้งฝั่งเครื่องแ
 
 ## XLSX Import
 
-จากหน้า Policy Center กด **นำเข้า XLSX** แล้วเลือก workbook ที่มี worksheet `In Scope` และคอลัมน์ `Policy Name`, `Criticality`, `Category`, `Enabled`, `Tenant`, `Device Category`
+จากหน้า Policy Center กด **นำเข้า XLSX** แล้วเลือก workbook ที่มี worksheet `In Scope` และคอลัมน์ `Policy Name`, `Criticality`, `Category`, `Enabled`, `Tenant`, `Device Category`, `Playbook Usage`
 
 - `Enabled` หรือ `Disabled` จะถูกบันทึกเป็น `active` หรือ `in-active`
 - Tenant values are stored together in one field, comma-separated, for example `site1,site2`.

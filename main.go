@@ -49,6 +49,7 @@ type policy struct {
 	Active         string `json:"active"`
 	Tenant         string `json:"tenant"`
 	DeviceCategory string `json:"device_category"`
+	PlaybookUsage  string `json:"playbook_usage"`
 }
 
 func main() {
@@ -141,7 +142,7 @@ func connectDatabase(ctx context.Context) (*pgxpool.Pool, error) {
 }
 
 func (s *server) exportPoliciesXLSX(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.Query(r.Context(), `SELECT id,COALESCE(policy_name,''),COALESCE(criticality,''),COALESCE(category,''),CASE WHEN lower(COALESCE(active,'')) IN ('active','enabled','true','yes','1') THEN 'Enabled' ELSE 'Disabled' END,COALESCE("Tenant",''),COALESCE("Device_Category",'') FROM policy_list_filtered ORDER BY id`)
+	rows, err := s.db.Query(r.Context(), `SELECT id,COALESCE(policy_name,''),COALESCE(criticality,''),COALESCE(category,''),CASE WHEN lower(COALESCE(active,'')) IN ('active','enabled','true','yes','1') THEN 'Enabled' ELSE 'Disabled' END,COALESCE("Tenant",''),COALESCE("Device_Category",''),COALESCE(playbook_usage,'') FROM policy_list_filtered ORDER BY id`)
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -150,7 +151,7 @@ func (s *server) exportPoliciesXLSX(w http.ResponseWriter, r *http.Request) {
 	f := excelize.NewFile()
 	defer f.Close()
 	sheet := f.GetSheetName(0)
-	headers := []any{"No.", "Policy Name", "Criticality", "Category", "Enabled", "Tenant", "Device Category"}
+	headers := []any{"No.", "Policy Name", "Criticality", "Category", "Enabled", "Tenant", "Device Category", "Playbook Usage"}
 	for col, v := range headers {
 		cell, _ := excelize.CoordinatesToCellName(col+1, 1)
 		if err := f.SetCellValue(sheet, cell, v); err != nil {
@@ -162,11 +163,11 @@ func (s *server) exportPoliciesXLSX(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var p policy
 		var enabled string
-		if err := rows.Scan(&p.ID, &p.PolicyName, &p.Criticality, &p.Category, &enabled, &p.Tenant, &p.DeviceCategory); err != nil {
+		if err := rows.Scan(&p.ID, &p.PolicyName, &p.Criticality, &p.Category, &enabled, &p.Tenant, &p.DeviceCategory, &p.PlaybookUsage); err != nil {
 			apiError(w, 500, err)
 			return
 		}
-		values := []any{p.ID, p.PolicyName, p.Criticality, p.Category, enabled, p.Tenant, p.DeviceCategory}
+		values := []any{p.ID, p.PolicyName, p.Criticality, p.Category, enabled, p.Tenant, p.DeviceCategory, p.PlaybookUsage}
 		for col, v := range values {
 			cell, _ := excelize.CoordinatesToCellName(col+1, rowNum)
 			if err := f.SetCellValue(sheet, cell, v); err != nil {
@@ -397,7 +398,7 @@ func (s *server) importPolicies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(r.Context())
-	dbrows, err := tx.Query(r.Context(), `SELECT id,COALESCE(policy_name,''),COALESCE(criticality,''),COALESCE(category,''),COALESCE(active,''),COALESCE("Tenant",''),COALESCE("Device_Category",'') FROM policy_list_filtered`)
+	dbrows, err := tx.Query(r.Context(), `SELECT id,COALESCE(policy_name,''),COALESCE(criticality,''),COALESCE(category,''),COALESCE(active,''),COALESCE("Tenant",''),COALESCE("Device_Category",''),COALESCE(playbook_usage,'') FROM policy_list_filtered`)
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -405,7 +406,7 @@ func (s *server) importPolicies(w http.ResponseWriter, r *http.Request) {
 	existing := map[int64]policy{}
 	for dbrows.Next() {
 		var p policy
-		if err := dbrows.Scan(&p.ID, &p.PolicyName, &p.Criticality, &p.Category, &p.Active, &p.Tenant, &p.DeviceCategory); err != nil {
+		if err := dbrows.Scan(&p.ID, &p.PolicyName, &p.Criticality, &p.Category, &p.Active, &p.Tenant, &p.DeviceCategory, &p.PlaybookUsage); err != nil {
 			dbrows.Close()
 			apiError(w, 500, err)
 			return
@@ -444,7 +445,7 @@ func (s *server) importPolicies(w http.ResponseWriter, r *http.Request) {
 			}
 			if legacyID > 0 {
 				old = existing[legacyID]
-				if _, err := tx.Exec(r.Context(), `UPDATE policy_list_filtered SET id=$1,policy_name=$2,criticality=$3,category=$4,active=$5,"Tenant"=$6,"Device_Category"=$7 WHERE id=$8`, candidate.ID, candidate.PolicyName, candidate.Criticality, candidate.Category, candidate.Active, candidate.Tenant, candidate.DeviceCategory, legacyID); err != nil {
+				if _, err := tx.Exec(r.Context(), `UPDATE policy_list_filtered SET id=$1,policy_name=$2,criticality=$3,category=$4,active=$5,"Tenant"=$6,"Device_Category"=$7,playbook_usage=$8 WHERE id=$9`, candidate.ID, candidate.PolicyName, candidate.Criticality, candidate.Category, candidate.Active, candidate.Tenant, candidate.DeviceCategory, candidate.PlaybookUsage, legacyID); err != nil {
 					apiError(w, 500, fmt.Errorf("migrate legacy No. %d: %w", legacyID, err))
 					return
 				}
@@ -454,7 +455,7 @@ func (s *server) importPolicies(w http.ResponseWriter, r *http.Request) {
 				result.Details = append(result.Details, importAction{No: candidate.ID, PolicyName: candidate.PolicyName, Tenant: candidate.Tenant, Action: "updated", Details: fmt.Sprintf("ID changed from %d to workbook No.; fields synchronized", legacyID)})
 				continue
 			}
-			if _, err := tx.Exec(r.Context(), `INSERT INTO policy_list_filtered (id,policy_name,criticality,category,active,"Tenant","Device_Category") OVERRIDING SYSTEM VALUE VALUES ($1,$2,$3,$4,$5,$6,$7)`, candidate.ID, candidate.PolicyName, candidate.Criticality, candidate.Category, candidate.Active, candidate.Tenant, candidate.DeviceCategory); err != nil {
+			if _, err := tx.Exec(r.Context(), `INSERT INTO policy_list_filtered (id,policy_name,criticality,category,active,"Tenant","Device_Category",playbook_usage) OVERRIDING SYSTEM VALUE VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, candidate.ID, candidate.PolicyName, candidate.Criticality, candidate.Category, candidate.Active, candidate.Tenant, candidate.DeviceCategory, candidate.PlaybookUsage); err != nil {
 				apiError(w, 500, fmt.Errorf("insert No. %d: %w", candidate.ID, err))
 				return
 			}
@@ -482,11 +483,14 @@ func (s *server) importPolicies(w http.ResponseWriter, r *http.Request) {
 		if !sameValue(old.DeviceCategory, candidate.DeviceCategory) {
 			changed = append(changed, "Device Category")
 		}
+		if !sameValue(old.PlaybookUsage, candidate.PlaybookUsage) {
+			changed = append(changed, "Playbook Usage")
+		}
 		if len(changed) == 0 {
 			result.Unchanged++
 			continue
 		}
-		if _, err := tx.Exec(r.Context(), `UPDATE policy_list_filtered SET policy_name=$1,criticality=$2,category=$3,active=$4,"Tenant"=$5,"Device_Category"=$6 WHERE id=$7`, candidate.PolicyName, candidate.Criticality, candidate.Category, candidate.Active, candidate.Tenant, candidate.DeviceCategory, candidate.ID); err != nil {
+		if _, err := tx.Exec(r.Context(), `UPDATE policy_list_filtered SET policy_name=$1,criticality=$2,category=$3,active=$4,"Tenant"=$5,"Device_Category"=$6,playbook_usage=$7 WHERE id=$8`, candidate.PolicyName, candidate.Criticality, candidate.Category, candidate.Active, candidate.Tenant, candidate.DeviceCategory, candidate.PlaybookUsage, candidate.ID); err != nil {
 			apiError(w, 500, fmt.Errorf("update No. %d: %w", candidate.ID, err))
 			return
 		}
@@ -589,7 +593,7 @@ func readPolicyXLSX(src multipart.File) ([]policy, error) {
 	for i, h := range data[0] {
 		indexes[normalizeHeader(h)] = i
 	}
-	required := []string{"no.", "policy name", "criticality", "category", "enabled", "tenant", "device category"}
+	required := []string{"no.", "policy name", "criticality", "category", "enabled", "tenant", "device category", "playbook usage"}
 	for _, name := range required {
 		if _, ok := indexes[name]; !ok {
 			return nil, fmt.Errorf("required column '%s' was not found", name)
@@ -631,7 +635,7 @@ func readPolicyXLSX(src multipart.File) ([]policy, error) {
 		if tenant == "" {
 			return nil, fmt.Errorf("row %d: Tenant is empty", line+2)
 		}
-		result = append(result, policy{ID: no, PolicyName: name, Criticality: cell(row, "criticality"), Category: cell(row, "category"), Active: active, Tenant: tenant, DeviceCategory: cell(row, "device category")})
+		result = append(result, policy{ID: no, PolicyName: name, Criticality: cell(row, "criticality"), Category: cell(row, "category"), Active: active, Tenant: tenant, DeviceCategory: cell(row, "device category"), PlaybookUsage: cell(row, "playbook usage")})
 	}
 	if len(result) == 0 {
 		return nil, fmt.Errorf("no valid policy records found")
@@ -660,7 +664,7 @@ func normalizeTenant(s string) string {
 }
 func (s *server) listPolicies(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	rows, err := s.db.Query(r.Context(), `SELECT id,COALESCE(policy_name,''),COALESCE(criticality,''),COALESCE(category,''),COALESCE(active,''),COALESCE("Tenant",''),COALESCE("Device_Category",'') FROM policy_list_filtered WHERE $1='' OR policy_name ILIKE '%'||$1||'%' OR criticality ILIKE '%'||$1||'%' OR category ILIKE '%'||$1||'%' OR active ILIKE '%'||$1||'%' OR "Tenant" ILIKE '%'||$1||'%' OR "Device_Category" ILIKE '%'||$1||'%' ORDER BY id LIMIT 5000`, q)
+	rows, err := s.db.Query(r.Context(), `SELECT id,COALESCE(policy_name,''),COALESCE(criticality,''),COALESCE(category,''),COALESCE(active,''),COALESCE("Tenant",''),COALESCE("Device_Category",''),COALESCE(playbook_usage,'') FROM policy_list_filtered WHERE $1='' OR policy_name ILIKE '%'||$1||'%' OR criticality ILIKE '%'||$1||'%' OR category ILIKE '%'||$1||'%' OR active ILIKE '%'||$1||'%' OR "Tenant" ILIKE '%'||$1||'%' OR "Device_Category" ILIKE '%'||$1||'%' OR playbook_usage ILIKE '%'||$1||'%' ORDER BY id LIMIT 5000`, q)
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -669,7 +673,7 @@ func (s *server) listPolicies(w http.ResponseWriter, r *http.Request) {
 	items := []policy{}
 	for rows.Next() {
 		var p policy
-		if err := rows.Scan(&p.ID, &p.PolicyName, &p.Criticality, &p.Category, &p.Active, &p.Tenant, &p.DeviceCategory); err != nil {
+		if err := rows.Scan(&p.ID, &p.PolicyName, &p.Criticality, &p.Category, &p.Active, &p.Tenant, &p.DeviceCategory, &p.PlaybookUsage); err != nil {
 			apiError(w, 500, err)
 			return
 		}
@@ -694,7 +698,7 @@ func (s *server) createPolicy(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	err := s.db.QueryRow(r.Context(), `INSERT INTO policy_list_filtered (policy_name,criticality,category,active,"Tenant","Device_Category") VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, p.PolicyName, p.Criticality, p.Category, p.Active, p.Tenant, p.DeviceCategory).Scan(&p.ID)
+	err := s.db.QueryRow(r.Context(), `INSERT INTO policy_list_filtered (policy_name,criticality,category,active,"Tenant","Device_Category",playbook_usage) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, p.PolicyName, p.Criticality, p.Category, p.Active, p.Tenant, p.DeviceCategory, p.PlaybookUsage).Scan(&p.ID)
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -711,7 +715,7 @@ func (s *server) updatePolicy(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, err)
 		return
 	}
-	tag, err := s.db.Exec(r.Context(), `UPDATE policy_list_filtered SET policy_name=$1,criticality=$2,category=$3,active=$4,"Tenant"=$5,"Device_Category"=$6 WHERE id=$7`, p.PolicyName, p.Criticality, p.Category, p.Active, p.Tenant, p.DeviceCategory, id)
+	tag, err := s.db.Exec(r.Context(), `UPDATE policy_list_filtered SET policy_name=$1,criticality=$2,category=$3,active=$4,"Tenant"=$5,"Device_Category"=$6,playbook_usage=$7 WHERE id=$8`, p.PolicyName, p.Criticality, p.Category, p.Active, p.Tenant, p.DeviceCategory, p.PlaybookUsage, id)
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -789,7 +793,7 @@ func (s *server) findPolicy(r *http.Request) (policy, error) {
 		return policy{}, err
 	}
 	var p policy
-	err = s.db.QueryRow(r.Context(), `SELECT id,COALESCE(policy_name,''),COALESCE(criticality,''),COALESCE(category,''),COALESCE(active,''),COALESCE("Tenant",''),COALESCE("Device_Category",'') FROM policy_list_filtered WHERE id=$1`, id).Scan(&p.ID, &p.PolicyName, &p.Criticality, &p.Category, &p.Active, &p.Tenant, &p.DeviceCategory)
+	err = s.db.QueryRow(r.Context(), `SELECT id,COALESCE(policy_name,''),COALESCE(criticality,''),COALESCE(category,''),COALESCE(active,''),COALESCE("Tenant",''),COALESCE("Device_Category",''),COALESCE(playbook_usage,'') FROM policy_list_filtered WHERE id=$1`, id).Scan(&p.ID, &p.PolicyName, &p.Criticality, &p.Category, &p.Active, &p.Tenant, &p.DeviceCategory, &p.PlaybookUsage)
 	return p, err
 }
 func parseID(r *http.Request) (int64, error) {
@@ -818,6 +822,7 @@ func decodePolicy(w http.ResponseWriter, r *http.Request) (policy, bool) {
 	p.Active = strings.TrimSpace(p.Active)
 	p.Tenant = strings.TrimSpace(p.Tenant)
 	p.DeviceCategory = strings.TrimSpace(p.DeviceCategory)
+	p.PlaybookUsage = strings.TrimSpace(p.PlaybookUsage)
 	return p, true
 }
 func policyErrorStatus(err error) int {
