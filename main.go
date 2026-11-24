@@ -67,6 +67,9 @@ func main() {
 		log.Fatalf("database: %v", err)
 	}
 	defer pool.Close()
+	if _, err := pool.Exec(ctx, `ALTER TABLE policy_list_filtered ADD COLUMN IF NOT EXISTS playbook_usage text`); err != nil {
+		log.Fatalf("ensure playbook_usage column: %v", err)
+	}
 	if err := validateAuthConfig(); err != nil {
 		log.Fatalf("authentication config: %v", err)
 	}

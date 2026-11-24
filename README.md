@@ -53,7 +53,7 @@ Docker map พอร์ต 9000 ทั้งฝั่งเครื่องแ
 
 ## Database schema
 
-แอปเชื่อมต่อและตรวจสถานะ PostgreSQL เท่านั้น ไม่มีการแก้ schema เมื่อเริ่มทำงาน หากเป็นการติดตั้งเดิม ให้รันคำสั่งต่อไปนี้กับฐานข้อมูลเดียวกับที่ `DATABASE_URL` ชี้อยู่ เพื่อเพิ่มคอลัมน์ `playbook_usage` โดยเก็บข้อมูลเดิมไว้:
+เมื่อเริ่มทำงาน แอปจะเพิ่มคอลัมน์ `playbook_usage` หากยังไม่มี ด้วยคำสั่ง `ADD COLUMN IF NOT EXISTS` ซึ่งเก็บข้อมูลเดิมไว้ หากฐานข้อมูลไม่อนุญาตให้ account ของแอปแก้ schema ให้ผู้ดูแลรันคำสั่งนี้กับฐานข้อมูลเดียวกับที่ `DATABASE_URL` ชี้อยู่:
 
 ```sql
 ALTER TABLE policy_list_filtered ADD COLUMN IF NOT EXISTS playbook_usage text;
